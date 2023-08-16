@@ -1,0 +1,92 @@
+Apologies for the confusion earlier. The code I provided will transfer files using multiple threads, but it doesn't guarantee that exactly 6 files will be transferred at a time. The number of files transferred simultaneously depends on how many files are present in the directory and how many threads are available for execution.
+
+If you want to ensure that exactly 6 files are transferred at a time, you can use a thread pool approach, where you maintain a fixed number of worker threads that process a batch of files concurrently. Here's a modified version of the code that implements a thread pool to transfer 6 files at a time:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <dirent.h>
+#include <string.h>
+
+#define NUM_THREADS 6
+#define PATH_TO_FILES "/path/to/files/"  // Replace with your path
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+int file_index = 0;
+int num_files = 0;
+
+void *transfer_file(void *filename) {
+    char *file = (char *)filename;
+    // Replace this with actual file transfer code
+    printf("Transferring file: %s\n", file);
+    pthread_exit(NULL);
+}
+
+void *thread_worker(void *arg) {
+    while (1) {
+        pthread_mutex_lock(&mutex);
+        while (file_index >= num_files) {
+            pthread_cond_wait(&cond, &mutex);
+        }
+        char *filename = ((char **)arg)[file_index];
+        file_index++;
+        pthread_mutex_unlock(&mutex);
+
+        if (filename == NULL) {
+            break;
+        }
+
+        transfer_file(filename);
+        free(filename);
+    }
+    pthread_exit(NULL);
+}
+
+int main() {
+    DIR *dir;
+    struct dirent *entry;
+
+    dir = opendir(PATH_TO_FILES);
+    if (dir == NULL) {
+        perror("Unable to open directory");
+        return 1;
+    }
+
+    char **filenames = malloc(sizeof(char *) * NUM_THREADS);
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_REG) {  // Regular files only
+            char *filename = entry->d_name;
+            filenames[num_files] = malloc(strlen(filename) + 1);
+            strcpy(filenames[num_files], filename);
+            num_files++;
+            if (num_files >= NUM_THREADS) {
+                break;
+            }
+        }
+    }
+
+    closedir(dir);
+
+    pthread_t threads[NUM_THREADS];
+    for (int i = 0; i < NUM_THREADS; i++) {
+        pthread_create(&threads[i], NULL, thread_worker, filenames);
+    }
+
+    for (int i = 0; i < NUM_THREADS; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    printf("All files transferred.\n");
+
+    free(filenames);
+
+    return 0;
+}
+```
+
+In this code, the `thread_worker` function is responsible for processing files using a thread pool approach. It waits for a signal indicating that there are files to be processed, and it transfers files until there are no more files left.
+
+Please replace `/path/to/files/` with the actual path where your files are located.
